@@ -30,6 +30,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #if defined(POINTING_DEVICE_ENABLE)
 
+  // Split pointing reports contain relative deltas. Consume remote axes once
+  // instead of replaying them until the next split transport update.
+  #define POINTING_DEVICE_CONSUME_SHARED_REPORT
+
   // Pointing device stuff
 
   #if defined(POINTING_DEVICE_IS_PIMORONI)

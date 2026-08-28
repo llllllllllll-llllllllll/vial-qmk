@@ -10,21 +10,21 @@
         "cols": 6
     },
     "customKeycodes": [
-      {"shortName": "Left\nDPI +",
-       "title": "Increase the DPI of the left pointing device.",
-       "name": "SV_LEFT_DPI_INC"
+      {"shortName": "Scroll\nCPI +",
+       "title": "Increase the CPI used by pointing devices in scroll mode.",
+       "name": "SV_SCROLL_CPI_INC"
       },
-      {"shortName": "Left\nDPI -",
-       "title": "Decrease the DPI of the left pointing device.",
-       "name": "SV_LEFT_DPI_DEC"
+      {"shortName": "Scroll\nCPI -",
+       "title": "Decrease the CPI used by pointing devices in scroll mode.",
+       "name": "SV_SCROLL_CPI_DEC"
       },
-      {"shortName": "Right\nDPI +",
-       "title": "Increase the DPI of the right pointing device.",
-       "name": "SV_RIGHT_DPI_INC"
+      {"shortName": "Pointer\nCPI +",
+       "title": "Increase the CPI used by pointing devices in pointer mode.",
+       "name": "SV_POINTER_CPI_INC"
       },
-      {"shortName": "Right\nDPI -",
-       "title": "Decrease the DPI of the right pointing device.",
-       "name": "SV_RIGHT_DPI_DEC"
+      {"shortName": "Pointer\nCPI -",
+       "title": "Decrease the CPI used by pointing devices in pointer mode.",
+       "name": "SV_POINTER_CPI_DEC"
       },
       {
         "shortName": "Scroll\nLeft\nToggle",

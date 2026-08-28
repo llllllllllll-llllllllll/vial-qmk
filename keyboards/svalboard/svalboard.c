@@ -21,8 +21,8 @@ void read_eeprom_kb(void) {
     eeconfig_read_kb_datablock(&global_saved_values, 0, EECONFIG_KB_DATA_SIZE);
     if (global_saved_values.version < 1) {
         global_saved_values.version = 1;
-        global_saved_values.right_dpi_index=3;
-        global_saved_values.left_dpi_index=3;
+        global_saved_values.pointer_cpi_index=3;
+        global_saved_values.scroll_cpi_index=3;
         modified = true;
     }
     if (global_saved_values.version < 2) {
@@ -67,6 +67,12 @@ void read_eeprom_kb(void) {
         global_saved_values.version = 6;
         global_saved_values.turbo_scan = 0;
     }
+    if (global_saved_values.version < 7) {
+        // Preserve the EEPROM byte layout while changing the setting model:
+        // the former left DPI becomes Scroll CPI, and right DPI becomes Pointer CPI.
+        global_saved_values.version = 7;
+        modified = true;
+    }
 
     // As we add versions, just append here.
     if (modified) {
@@ -95,9 +101,14 @@ void output_keyboard_info(void) {
 
     sprintf(output_buffer, "%s:%s @ %s\n", QMK_KEYBOARD, QMK_KEYMAP, QMK_VERSION);
     send_string(output_buffer);
-    sprintf(output_buffer, "Left Ptr: Scroll %s, cpi: %d, Right Ptr: Scroll %s, cpi: %d\n",
-	    yes_or_no(global_saved_values.left_scroll), dpi_choices[global_saved_values.left_dpi_index],
-	    yes_or_no(global_saved_values.right_scroll), dpi_choices[global_saved_values.right_dpi_index]);
+    bool left_scroll  = sval_left_is_scroll_mode();
+    bool right_scroll = sval_right_is_scroll_mode();
+    sprintf(output_buffer, "Scroll CPI: %d, Pointer CPI: %d\n",
+	    get_scroll_cpi(), get_pointer_cpi());
+    send_string(output_buffer);
+    sprintf(output_buffer, "Left Ptr: %s @ %d CPI, Right Ptr: %s @ %d CPI\n",
+	    left_scroll ? "Scroll" : "Pointer", left_scroll ? get_scroll_cpi() : get_pointer_cpi(),
+	    right_scroll ? "Scroll" : "Pointer", right_scroll ? get_scroll_cpi() : get_pointer_cpi());
     send_string(output_buffer);
     sprintf(output_buffer, "Axis Scroll Lock: %s (is Mac: %d), Mouse Layer: %s, Mouse Layer Timeout: %d, Turbo Scan: %d\n",
 	    yes_or_no(global_saved_values.axis_scroll_lock),
@@ -120,44 +131,40 @@ void change_turbo_scan(void) {
     write_eeprom_kb();
 }
 
-void increase_left_dpi(void) {
-    if (global_saved_values.left_dpi_index + 1 < DPI_CHOICES_LENGTH) {
-        global_saved_values.left_dpi_index++;
-        set_left_dpi(global_saved_values.left_dpi_index);
+void increase_scroll_cpi(void) {
+    if (global_saved_values.scroll_cpi_index + 1 < DPI_CHOICES_LENGTH) {
+        global_saved_values.scroll_cpi_index++;
         write_eeprom_kb();
     }
 }
 
-void decrease_left_dpi(void) {
-    if (global_saved_values.left_dpi_index > 0) {
-        global_saved_values.left_dpi_index--;
-        set_left_dpi(global_saved_values.left_dpi_index);
+void decrease_scroll_cpi(void) {
+    if (global_saved_values.scroll_cpi_index > 0) {
+        global_saved_values.scroll_cpi_index--;
         write_eeprom_kb();
     }
 }
 
-void increase_right_dpi(void) {
-    if (global_saved_values.right_dpi_index + 1 < DPI_CHOICES_LENGTH) {
-        global_saved_values.right_dpi_index++;
-        set_right_dpi(global_saved_values.right_dpi_index);
+void increase_pointer_cpi(void) {
+    if (global_saved_values.pointer_cpi_index + 1 < DPI_CHOICES_LENGTH) {
+        global_saved_values.pointer_cpi_index++;
         write_eeprom_kb();
     }
 }
 
-void decrease_right_dpi(void) {
-    if (global_saved_values.right_dpi_index > 0) {
-        global_saved_values.right_dpi_index--;
-        set_right_dpi(global_saved_values.right_dpi_index);
+void decrease_pointer_cpi(void) {
+    if (global_saved_values.pointer_cpi_index > 0) {
+        global_saved_values.pointer_cpi_index--;
         write_eeprom_kb();
     }
 }
 
-int16_t get_left_dpi() {
-    return dpi_choices[global_saved_values.left_dpi_index];
+int16_t get_scroll_cpi() {
+    return dpi_choices[global_saved_values.scroll_cpi_index];
 }
 
-int16_t get_right_dpi() {
-    return dpi_choices[global_saved_values.right_dpi_index];
+int16_t get_pointer_cpi() {
+    return dpi_choices[global_saved_values.pointer_cpi_index];
 }
 
 // TODO: Still need to add code to save values.
@@ -172,8 +179,8 @@ void set_right_dpi(uint8_t index) {
 }
 
 void set_dpi_from_eeprom(void) {
-    set_left_dpi(global_saved_values.left_dpi_index);
-    set_right_dpi(global_saved_values.right_dpi_index);
+    set_left_dpi(global_saved_values.left_scroll ? global_saved_values.scroll_cpi_index : global_saved_values.pointer_cpi_index);
+    set_right_dpi(global_saved_values.right_scroll ? global_saved_values.scroll_cpi_index : global_saved_values.pointer_cpi_index);
 }
 
 void sval_set_active_layer(uint32_t layer, bool save) {

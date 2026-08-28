@@ -98,6 +98,36 @@ bool enable_scale_5 = false;
 static bool scroll_hold    = false,
             scroll_toggle  = false;
 
+bool sval_left_is_scroll_mode(void) {
+    return (global_saved_values.left_scroll != scroll_hold) != scroll_toggle;
+}
+
+bool sval_right_is_scroll_mode(void) {
+    return (global_saved_values.right_scroll != scroll_hold) != scroll_toggle;
+}
+
+void apply_pointing_cpi_for_modes(void) {
+    set_left_dpi(sval_left_is_scroll_mode() ? global_saved_values.scroll_cpi_index : global_saved_values.pointer_cpi_index);
+    set_right_dpi(sval_right_is_scroll_mode() ? global_saved_values.scroll_cpi_index : global_saved_values.pointer_cpi_index);
+}
+
+#if defined(POINTING_DEVICE_IS_PMW3360) || defined(POINTING_DEVICE_IS_PMW3389)
+#    ifndef SVAL_SCROLL_ACTIVATION_THRESHOLD
+#        define SVAL_SCROLL_ACTIVATION_THRESHOLD 4
+#    endif
+#    ifndef SVAL_SCROLL_IDLE_TIMEOUT_MS
+#        define SVAL_SCROLL_IDLE_TIMEOUT_MS 80
+#    endif
+typedef struct {
+    int32_t  pending_x;
+    int32_t  pending_y;
+    uint16_t last_motion;
+    bool     active;
+} scroll_activation_state_t;
+
+static scroll_activation_state_t left_scroll_activation  = {0};
+static scroll_activation_state_t right_scroll_activation = {0};
+#endif
 
 #define AXIS_LOCK_BREAKAWAY_THRESHOLD 18750
 #define AXIS_LOCK_ENGAGE_THRESHOLD 6250
@@ -115,6 +145,84 @@ static enum scroll_mode {
 static int32_t axis_lock_accum_h = 0;
 static int32_t axis_lock_accum_v = 0;
 static uint16_t axis_lock_timer = 0;
+
+static void reset_scroll_state(void) {
+    scroll_timer_running   = false;
+    scroll_timer           = 0;
+    scroll_accumulator_h   = 0;
+    scroll_accumulator_v   = 0;
+    m_scroll_accumulator_h = 0;
+    m_scroll_accumulator_v = 0;
+    axis_scroll_mode       = SV_AXIS_FREE;
+    axis_lock_accum_h      = 0;
+    axis_lock_accum_v      = 0;
+    axis_lock_timer        = 0;
+
+    clear_remainder_axis(&l_x);
+    clear_remainder_axis(&l_y);
+    clear_remainder_axis(&r_x);
+    clear_remainder_axis(&r_y);
+
+#if defined(POINTING_DEVICE_IS_PMW3360) || defined(POINTING_DEVICE_IS_PMW3389)
+    left_scroll_activation  = (scroll_activation_state_t){0};
+    right_scroll_activation = (scroll_activation_state_t){0};
+#endif
+}
+
+#if defined(POINTING_DEVICE_IS_PMW3360) || defined(POINTING_DEVICE_IS_PMW3389)
+static bool activate_optical_scroll(scroll_activation_state_t *state, report_mouse_t *report) {
+    int16_t motion_x = report->x;
+    int16_t motion_y = report->y;
+    uint16_t now      = timer_read();
+
+    // PMW33xx sensors only produce relative X/Y motion. Never allow stale
+    // wheel fields from a previous or split report to enter the scroll path.
+    report->h = 0;
+    report->v = 0;
+
+    if (motion_x == 0 && motion_y == 0) {
+        if ((state->active || state->pending_x != 0 || state->pending_y != 0) && timer_elapsed(state->last_motion) > SVAL_SCROLL_IDLE_TIMEOUT_MS) {
+            *state = (scroll_activation_state_t){0};
+        }
+        return state->active;
+    }
+
+    if (state->active) {
+        state->last_motion = now;
+        return true;
+    }
+
+    // Pending motion must cross the threshold within one activation window.
+    // Sparse sensor noise must not keep extending the window forever.
+    if (state->pending_x == 0 && state->pending_y == 0) {
+        state->last_motion = now;
+    } else if (timer_elapsed(state->last_motion) > SVAL_SCROLL_IDLE_TIMEOUT_MS) {
+        state->pending_x   = 0;
+        state->pending_y   = 0;
+        state->last_motion = now;
+    }
+
+    state->pending_x += motion_x;
+    state->pending_y += motion_y;
+    report->x = 0;
+    report->y = 0;
+
+    int32_t magnitude_x = state->pending_x < 0 ? -state->pending_x : state->pending_x;
+    int32_t magnitude_y = state->pending_y < 0 ? -state->pending_y : state->pending_y;
+    if (magnitude_x + magnitude_y < SVAL_SCROLL_ACTIVATION_THRESHOLD) {
+        return false;
+    }
+
+    state->active      = true;
+    state->last_motion = now;
+    report->x          = CONSTRAIN_HID_XY(state->pending_x);
+    report->y          = CONSTRAIN_HID_XY(state->pending_y);
+    state->pending_x   = 0;
+    state->pending_y   = 0;
+    return true;
+}
+
+#endif
 
 
 void update_axis_scroll_mode(int32_t h, int32_t v) {
@@ -201,6 +309,8 @@ void handle_sniper_key(bool pressed, uint8_t divisor) {
 
 report_mouse_t pointing_device_task_combined_user(report_mouse_t reportMouse1, report_mouse_t reportMouse2) {
     report_mouse_t ret_mouse;
+    bool           left_is_scroll  = sval_left_is_scroll_mode();
+    bool           right_is_scroll = sval_right_is_scroll_mode();
 
     if (enable_scale_2 || enable_scale_3 || enable_scale_5) {
         reportMouse1.x = add_to_axis(&sniper_x, reportMouse1.x);
@@ -214,23 +324,41 @@ report_mouse_t pointing_device_task_combined_user(report_mouse_t reportMouse1, r
         reportMouse2.v = add_to_axis(&sniper_v, reportMouse2.v);
     }
 
-    if (reportMouse1.x == 0 && reportMouse1.y == 0 && reportMouse2.x == 0 && reportMouse2.y == 0)
-        return pointing_device_combine_reports(reportMouse1, reportMouse2);
-
-    if ((global_saved_values.left_scroll != scroll_hold) != scroll_toggle) {
+    if (left_is_scroll) {
+#if defined(POINTING_DEVICE_IS_PMW3360) || defined(POINTING_DEVICE_IS_PMW3389)
+        if (!activate_optical_scroll(&left_scroll_activation, &reportMouse1)) {
+            reportMouse1.x = 0;
+            reportMouse1.y = 0;
+        }
+#endif
         reportMouse1.h = add_to_axis(&l_x, reportMouse1.x);
         reportMouse1.v = add_to_axis(&l_y, -reportMouse1.y);
 
-	
         reportMouse1.x = 0;
         reportMouse1.y = 0;
+#if defined(POINTING_DEVICE_IS_PMW3360) || defined(POINTING_DEVICE_IS_PMW3389)
+    } else {
+        reportMouse1.h = 0;
+        reportMouse1.v = 0;
+#endif
     }
-    if ((global_saved_values.right_scroll != scroll_hold) != scroll_toggle) {
+    if (right_is_scroll) {
+#if defined(POINTING_DEVICE_IS_PMW3360) || defined(POINTING_DEVICE_IS_PMW3389)
+        if (!activate_optical_scroll(&right_scroll_activation, &reportMouse2)) {
+            reportMouse2.x = 0;
+            reportMouse2.y = 0;
+        }
+#endif
         reportMouse2.h = add_to_axis(&r_x, reportMouse2.x);
         reportMouse2.v = add_to_axis(&r_y, -reportMouse2.y);
 
         reportMouse2.x = 0;
         reportMouse2.y = 0;
+#if defined(POINTING_DEVICE_IS_PMW3360) || defined(POINTING_DEVICE_IS_PMW3389)
+    } else {
+        reportMouse2.h = 0;
+        reportMouse2.v = 0;
+#endif
     }
 
     if ((reportMouse1.h != 0 || reportMouse1.v != 0 || reportMouse2.h != 0 || reportMouse2.v != 0) && !scroll_timer_running) {
@@ -239,10 +367,12 @@ report_mouse_t pointing_device_task_combined_user(report_mouse_t reportMouse1, r
     }
 
     if (scroll_timer_running) {
-        m_scroll_accumulator_h += ((int32_t)reportMouse1.h * 100000) / get_left_dpi();
-	m_scroll_accumulator_v += ((int32_t)reportMouse1.v * 100000) / get_left_dpi();
-	m_scroll_accumulator_h += ((int32_t)reportMouse2.h * 100000) / get_right_dpi();
-	m_scroll_accumulator_v += ((int32_t)reportMouse2.v * 100000) / get_right_dpi();
+        int16_t left_cpi  = left_is_scroll ? get_scroll_cpi() : get_pointer_cpi();
+        int16_t right_cpi = right_is_scroll ? get_scroll_cpi() : get_pointer_cpi();
+        m_scroll_accumulator_h += ((int32_t)reportMouse1.h * 100000) / left_cpi;
+	m_scroll_accumulator_v += ((int32_t)reportMouse1.v * 100000) / left_cpi;
+	m_scroll_accumulator_h += ((int32_t)reportMouse2.h * 100000) / right_cpi;
+	m_scroll_accumulator_v += ((int32_t)reportMouse2.v * 100000) / right_cpi;
 
         scroll_accumulator_h += reportMouse1.h + reportMouse2.h;
         scroll_accumulator_v += reportMouse1.v + reportMouse2.v;
@@ -272,7 +402,6 @@ report_mouse_t pointing_device_task_combined_user(report_mouse_t reportMouse1, r
 	m_scroll_accumulator_v = 0;
     }
 
-    mouse_mode(true);
     ret_mouse = pointing_device_combine_reports(reportMouse1, reportMouse2);
 
     return pointing_device_task_user(ret_mouse);
@@ -354,11 +483,11 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
         // as more functionality is exported to keybard, and those keys are removed
         // from the firmmware. - ilc - 2024-10-05
 #define BAD_KEYCODE_CONDITONAL  (keycode == KC_NO ||  \
-	                    keycode == KC_TRNS || \
-		            keycode == SV_LEFT_DPI_INC || \
-	                    keycode == SV_LEFT_DPI_DEC || \
-	                    keycode == SV_RIGHT_DPI_INC || \
-	                    keycode == SV_RIGHT_DPI_DEC || \
+                    keycode == KC_TRNS || \
+		            keycode == SV_SCROLL_CPI_INC || \
+                    keycode == SV_SCROLL_CPI_DEC || \
+                    keycode == SV_POINTER_CPI_INC || \
+                    keycode == SV_POINTER_CPI_DEC || \
 	                    keycode == SV_LEFT_SCROLL_TOGGLE || \
 		            keycode == SV_RIGHT_SCROLL_TOGGLE || \
 		            keycode == SV_AXIS_SCROLL_LOCK || \
@@ -393,24 +522,36 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
 
     if (record->event.pressed) { // key pressed
         switch (keycode) {
-            case SV_LEFT_DPI_INC:
-                increase_left_dpi();
+            case SV_SCROLL_CPI_INC:
+                reset_scroll_state();
+                increase_scroll_cpi();
+                apply_pointing_cpi_for_modes();
                 return false;
-            case SV_LEFT_DPI_DEC:
-                decrease_left_dpi();
+            case SV_SCROLL_CPI_DEC:
+                reset_scroll_state();
+                decrease_scroll_cpi();
+                apply_pointing_cpi_for_modes();
                 return false;
-            case SV_RIGHT_DPI_INC:
-                increase_right_dpi();
+            case SV_POINTER_CPI_INC:
+                reset_scroll_state();
+                increase_pointer_cpi();
+                apply_pointing_cpi_for_modes();
                 return false;
-            case SV_RIGHT_DPI_DEC:
-                decrease_right_dpi();
+            case SV_POINTER_CPI_DEC:
+                reset_scroll_state();
+                decrease_pointer_cpi();
+                apply_pointing_cpi_for_modes();
                 return false;
             case SV_LEFT_SCROLL_TOGGLE:
+                reset_scroll_state();
                 global_saved_values.left_scroll = !global_saved_values.left_scroll;
+                apply_pointing_cpi_for_modes();
                 write_eeprom_kb();
                 return false;
             case SV_RIGHT_SCROLL_TOGGLE:
+                reset_scroll_state();
                 global_saved_values.right_scroll = !global_saved_values.right_scroll;
+                apply_pointing_cpi_for_modes();
                 write_eeprom_kb();
                 return false;
             case SV_RECALIBRATE_POINTER:
@@ -448,7 +589,9 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
                 handle_sniper_key(true, 5);
                 return false;
             case SV_SCROLL_HOLD:
+                reset_scroll_state();
                 scroll_hold = true;
+                apply_pointing_cpi_for_modes();
                 return false;
             case SV_SCROLL_TOGGLE:
                 return false;
@@ -494,10 +637,14 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
                 handle_sniper_key(false, 5);
                 return false;
             case SV_SCROLL_HOLD:
+                reset_scroll_state();
                 scroll_hold = false;
+                apply_pointing_cpi_for_modes();
                 return false;
             case SV_SCROLL_TOGGLE:
+                reset_scroll_state();
                 scroll_toggle ^= true;
+                apply_pointing_cpi_for_modes();
                 return false;
         }
     }
