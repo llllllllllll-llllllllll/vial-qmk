@@ -7,6 +7,28 @@
 saved_values_t global_saved_values;
 const int16_t mh_timer_choices[6] = { 200, 300, 400, 500, 800, -1 }; // -1 is infinite.
 
+#define SVAL_CPI_UNIT            100U
+#define SVAL_CPI_MIN             200U
+#define SVAL_CPI_MAX             12000U
+#define SVAL_SCROLL_CPI_DEFAULT  800U
+#define SVAL_POINTER_CPI_DEFAULT 2800U
+
+// Version 7 and earlier stored indexes into this table. Keep it only for the
+// one-time EEPROM migration to version 8.
+static const uint16_t legacy_dpi_choices[] = {200, 400, 600, 800, 1200, 1600, 2400, 3200, 4800, 6400, 12000};
+
+// EEPROM stores the actual CPI (in units of 100); these tables only define the
+// useful stages selected by the CPI +/- keycodes.
+static const uint16_t scroll_cpi_stages[]  = {200, 400, 600, 800, 1000, 1200, 1600, 2400, 3200};
+static const uint16_t pointer_cpi_stages[] = {800, 1200, 1600, 2000, 2400, 2800, 3200, 4000, 4800, 6400, 8000, 12000};
+
+static uint8_t legacy_index_to_cpi_units(uint8_t index, uint16_t default_cpi) {
+    if (index < ARRAY_SIZE(legacy_dpi_choices)) {
+        return legacy_dpi_choices[index] / SVAL_CPI_UNIT;
+    }
+    return default_cpi / SVAL_CPI_UNIT;
+}
+
 uint8_t sval_active_layer = 0;
 #ifdef VIAL_ENABLE
 bool fresh_install = false;
@@ -19,10 +41,12 @@ void write_eeprom_kb(void) {
 void read_eeprom_kb(void) {
     bool modified = false;
     eeconfig_read_kb_datablock(&global_saved_values, 0, EECONFIG_KB_DATA_SIZE);
+    uint8_t stored_version = global_saved_values.version;
     if (global_saved_values.version < 1) {
         global_saved_values.version = 1;
-        global_saved_values.pointer_cpi_index=3;
-        global_saved_values.scroll_cpi_index=3;
+        // These bytes remain legacy indexes until the version 8 migration.
+        global_saved_values.pointer_cpi_units = 3;
+        global_saved_values.scroll_cpi_units  = 3;
         modified = true;
     }
     if (global_saved_values.version < 2) {
@@ -73,6 +97,32 @@ void read_eeprom_kb(void) {
         global_saved_values.version = 7;
         modified = true;
     }
+    if (global_saved_values.version < 8) {
+        uint8_t old_scroll_index  = global_saved_values.scroll_cpi_units;
+        uint8_t old_pointer_index = global_saved_values.pointer_cpi_units;
+
+        if (stored_version == 0) {
+            // A fresh EEPROM receives the new role defaults.
+            global_saved_values.scroll_cpi_units  = SVAL_SCROLL_CPI_DEFAULT / SVAL_CPI_UNIT;
+            global_saved_values.pointer_cpi_units = SVAL_POINTER_CPI_DEFAULT / SVAL_CPI_UNIT;
+        } else {
+            // Existing users keep the actual CPI represented by their old index.
+            global_saved_values.scroll_cpi_units  = legacy_index_to_cpi_units(old_scroll_index, SVAL_SCROLL_CPI_DEFAULT);
+            global_saved_values.pointer_cpi_units = legacy_index_to_cpi_units(old_pointer_index, SVAL_POINTER_CPI_DEFAULT);
+        }
+        global_saved_values.version = 8;
+        modified                    = true;
+    }
+
+    // Reject damaged or unsupported EEPROM values without changing the layout.
+    if (global_saved_values.scroll_cpi_units < SVAL_CPI_MIN / SVAL_CPI_UNIT || global_saved_values.scroll_cpi_units > SVAL_CPI_MAX / SVAL_CPI_UNIT) {
+        global_saved_values.scroll_cpi_units = SVAL_SCROLL_CPI_DEFAULT / SVAL_CPI_UNIT;
+        modified                              = true;
+    }
+    if (global_saved_values.pointer_cpi_units < SVAL_CPI_MIN / SVAL_CPI_UNIT || global_saved_values.pointer_cpi_units > SVAL_CPI_MAX / SVAL_CPI_UNIT) {
+        global_saved_values.pointer_cpi_units = SVAL_POINTER_CPI_DEFAULT / SVAL_CPI_UNIT;
+        modified                               = true;
+    }
 
     // As we add versions, just append here.
     if (modified) {
@@ -92,8 +142,6 @@ const char *yes_or_no(int flag) {
     }
 }
 
-const uint16_t dpi_choices[] = { 200, 400, 600, 800, 1200, 1600, 2400, 3200, 4800, 6400, 12000 }; // If we need more, add them.
-#define DPI_CHOICES_LENGTH (sizeof(dpi_choices)/sizeof(dpi_choices[0]))
 extern bool is_mac;
 
 void output_keyboard_info(void) {
@@ -131,56 +179,73 @@ void change_turbo_scan(void) {
     write_eeprom_kb();
 }
 
-void increase_scroll_cpi(void) {
-    if (global_saved_values.scroll_cpi_index + 1 < DPI_CHOICES_LENGTH) {
-        global_saved_values.scroll_cpi_index++;
+static uint16_t next_cpi_stage(uint16_t current, const uint16_t *stages, size_t stage_count) {
+    for (size_t i = 0; i < stage_count; i++) {
+        if (stages[i] > current) {
+            return stages[i];
+        }
+    }
+    return current;
+}
+
+static uint16_t previous_cpi_stage(uint16_t current, const uint16_t *stages, size_t stage_count) {
+    for (size_t i = stage_count; i > 0; i--) {
+        if (stages[i - 1] < current) {
+            return stages[i - 1];
+        }
+    }
+    return current;
+}
+
+static void store_cpi_if_changed(uint8_t *stored_units, uint16_t cpi) {
+    uint8_t new_units = cpi / SVAL_CPI_UNIT;
+    if (*stored_units != new_units) {
+        *stored_units = new_units;
         write_eeprom_kb();
     }
+}
+
+void increase_scroll_cpi(void) {
+    store_cpi_if_changed(&global_saved_values.scroll_cpi_units,
+                         next_cpi_stage(get_scroll_cpi(), scroll_cpi_stages, ARRAY_SIZE(scroll_cpi_stages)));
 }
 
 void decrease_scroll_cpi(void) {
-    if (global_saved_values.scroll_cpi_index > 0) {
-        global_saved_values.scroll_cpi_index--;
-        write_eeprom_kb();
-    }
+    store_cpi_if_changed(&global_saved_values.scroll_cpi_units,
+                         previous_cpi_stage(get_scroll_cpi(), scroll_cpi_stages, ARRAY_SIZE(scroll_cpi_stages)));
 }
 
 void increase_pointer_cpi(void) {
-    if (global_saved_values.pointer_cpi_index + 1 < DPI_CHOICES_LENGTH) {
-        global_saved_values.pointer_cpi_index++;
-        write_eeprom_kb();
-    }
+    store_cpi_if_changed(&global_saved_values.pointer_cpi_units,
+                         next_cpi_stage(get_pointer_cpi(), pointer_cpi_stages, ARRAY_SIZE(pointer_cpi_stages)));
 }
 
 void decrease_pointer_cpi(void) {
-    if (global_saved_values.pointer_cpi_index > 0) {
-        global_saved_values.pointer_cpi_index--;
-        write_eeprom_kb();
-    }
+    store_cpi_if_changed(&global_saved_values.pointer_cpi_units,
+                         previous_cpi_stage(get_pointer_cpi(), pointer_cpi_stages, ARRAY_SIZE(pointer_cpi_stages)));
 }
 
-int16_t get_scroll_cpi() {
-    return dpi_choices[global_saved_values.scroll_cpi_index];
+uint16_t get_scroll_cpi(void) {
+    return global_saved_values.scroll_cpi_units * SVAL_CPI_UNIT;
 }
 
-int16_t get_pointer_cpi() {
-    return dpi_choices[global_saved_values.pointer_cpi_index];
+uint16_t get_pointer_cpi(void) {
+    return global_saved_values.pointer_cpi_units * SVAL_CPI_UNIT;
 }
 
-// TODO: Still need to add code to save values.
-void set_left_dpi(uint8_t index) {
-    uprintf("LDPI: %d %d\n", index, dpi_choices[index]);
-    pointing_device_set_cpi_on_side(true, dpi_choices[index]);
+void set_left_cpi(uint16_t cpi) {
+    uprintf("LCPI: %u\n", cpi);
+    pointing_device_set_cpi_on_side(true, cpi);
 }
 
-void set_right_dpi(uint8_t index) {
-    uprintf("RDPI: %d %d\n", index, dpi_choices[index]);
-    pointing_device_set_cpi_on_side(false, dpi_choices[index]);
+void set_right_cpi(uint16_t cpi) {
+    uprintf("RCPI: %u\n", cpi);
+    pointing_device_set_cpi_on_side(false, cpi);
 }
 
 void set_dpi_from_eeprom(void) {
-    set_left_dpi(global_saved_values.left_scroll ? global_saved_values.scroll_cpi_index : global_saved_values.pointer_cpi_index);
-    set_right_dpi(global_saved_values.right_scroll ? global_saved_values.scroll_cpi_index : global_saved_values.pointer_cpi_index);
+    set_left_cpi(global_saved_values.left_scroll ? get_scroll_cpi() : get_pointer_cpi());
+    set_right_cpi(global_saved_values.right_scroll ? get_scroll_cpi() : get_pointer_cpi());
 }
 
 void sval_set_active_layer(uint32_t layer, bool save) {

@@ -107,8 +107,8 @@ bool sval_right_is_scroll_mode(void) {
 }
 
 void apply_pointing_cpi_for_modes(void) {
-    set_left_dpi(sval_left_is_scroll_mode() ? global_saved_values.scroll_cpi_index : global_saved_values.pointer_cpi_index);
-    set_right_dpi(sval_right_is_scroll_mode() ? global_saved_values.scroll_cpi_index : global_saved_values.pointer_cpi_index);
+    set_left_cpi(sval_left_is_scroll_mode() ? get_scroll_cpi() : get_pointer_cpi());
+    set_right_cpi(sval_right_is_scroll_mode() ? get_scroll_cpi() : get_pointer_cpi());
 }
 
 #if defined(POINTING_DEVICE_IS_PMW3360) || defined(POINTING_DEVICE_IS_PMW3389)
