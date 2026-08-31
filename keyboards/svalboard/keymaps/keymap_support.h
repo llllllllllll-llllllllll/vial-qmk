@@ -22,12 +22,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "svalboard.h"
 
 enum my_keycodes {
-    SV_LEFT_DPI_INC = QK_KB_0,
-    SV_LEFT_DPI_DEC,
-    SV_RIGHT_DPI_INC,
-    SV_RIGHT_DPI_DEC,
-    SV_LEFT_SCROLL_TOGGLE,
-    SV_RIGHT_SCROLL_TOGGLE,
+    SV_SCROLL_CPI_INC = QK_KB_0,
+    SV_SCROLL_CPI_DEC,
+    SV_POINTER_CPI_INC,
+    SV_POINTER_CPI_DEC,
+    SV_LEFT_MODE_TOGGLE,
+    SV_RIGHT_MODE_TOGGLE,
     SV_RECALIBRATE_POINTER,
     SV_MH_CHANGE_TIMEOUTS,
     SV_CAPS_WORD,
@@ -37,8 +37,8 @@ enum my_keycodes {
     SV_SNIPER_2,
     SV_SNIPER_3,
     SV_SNIPER_5,
-    SV_SCROLL_HOLD,
-    SV_SCROLL_TOGGLE,
+    SV_BOTH_MODE_HOLD,
+    SV_BOTH_MODE_TOGGLE,
     SV_OUTPUT_STATUS,
     SV_TOGGLE_AUTOMOUSE,
     SV_TURBO_SCAN,
@@ -46,5 +46,18 @@ enum my_keycodes {
     KC_FUNC_HOLD,
     SV_SAFE_RANGE, // Keycodes over this are safe on Svalboard.
 };
+
+// Preserve the numeric keycodes and source compatibility for existing keymaps.
+#define SV_LEFT_DPI_INC  SV_SCROLL_CPI_INC
+#define SV_LEFT_DPI_DEC  SV_SCROLL_CPI_DEC
+#define SV_RIGHT_DPI_INC SV_POINTER_CPI_INC
+#define SV_RIGHT_DPI_DEC SV_POINTER_CPI_DEC
+
+// Legacy source aliases. The canonical names describe the actual Pointer/Scroll
+// mode transition while preserving the existing custom-keycode values.
+#define SV_LEFT_SCROLL_TOGGLE  SV_LEFT_MODE_TOGGLE
+#define SV_RIGHT_SCROLL_TOGGLE SV_RIGHT_MODE_TOGGLE
+#define SV_SCROLL_HOLD         SV_BOTH_MODE_HOLD
+#define SV_SCROLL_TOGGLE       SV_BOTH_MODE_TOGGLE
 
 #define MH_AUTO_BUTTONS_LAYER (DYNAMIC_KEYMAP_LAYER_COUNT - 1)

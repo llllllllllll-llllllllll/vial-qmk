@@ -355,6 +355,17 @@ __attribute__((weak)) bool pointing_device_task(void) {
         shared_mouse_report = pointing_device_adjust_by_defines(shared_mouse_report);
     }
     local_mouse_report = is_keyboard_left() ? pointing_device_task_combined_kb(local_mouse_report, shared_mouse_report) : pointing_device_task_combined_kb(shared_mouse_report, local_mouse_report);
+
+#    ifdef POINTING_DEVICE_CONSUME_SHARED_REPORT
+    // Relative axes are deltas, not persistent state. Consume a remote report
+    // only once even when the split transport updates more slowly than the
+    // master pointing-device task. Buttons remain persistent until the remote
+    // half reports a new state.
+    shared_mouse_report.x = 0;
+    shared_mouse_report.y = 0;
+    shared_mouse_report.h = 0;
+    shared_mouse_report.v = 0;
+#    endif
 #else
     local_mouse_report = pointing_device_adjust_by_defines(local_mouse_report);
 #endif

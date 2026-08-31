@@ -10,31 +10,31 @@
         "cols": 6
     },
     "customKeycodes": [
-      {"shortName": "Left\nDPI +",
-       "title": "Increase the DPI of the left pointing device.",
-       "name": "SV_LEFT_DPI_INC"
+      {"shortName": "Scroll\nCPI +",
+       "title": "Increase the CPI used by pointing devices in scroll mode.",
+       "name": "SV_SCROLL_CPI_INC"
       },
-      {"shortName": "Left\nDPI -",
-       "title": "Decrease the DPI of the left pointing device.",
-       "name": "SV_LEFT_DPI_DEC"
+      {"shortName": "Scroll\nCPI -",
+       "title": "Decrease the CPI used by pointing devices in scroll mode.",
+       "name": "SV_SCROLL_CPI_DEC"
       },
-      {"shortName": "Right\nDPI +",
-       "title": "Increase the DPI of the right pointing device.",
-       "name": "SV_RIGHT_DPI_INC"
+      {"shortName": "Pointer\nCPI +",
+       "title": "Increase the CPI used by pointing devices in pointer mode.",
+       "name": "SV_POINTER_CPI_INC"
       },
-      {"shortName": "Right\nDPI -",
-       "title": "Decrease the DPI of the right pointing device.",
-       "name": "SV_RIGHT_DPI_DEC"
-      },
-      {
-        "shortName": "Scroll\nLeft\nToggle",
-        "title": "Toggle if the left pointer is scroll or pointer.",
-        "name": "SV_LEFT_SCROLL_TOGGLE"
+      {"shortName": "Pointer\nCPI -",
+       "title": "Decrease the CPI used by pointing devices in pointer mode.",
+       "name": "SV_POINTER_CPI_DEC"
       },
       {
-        "shortName": "Scroll\nRight\nToggle",
-        "title": "Toggle if the right pointer is scroll or pointer.",
-        "name": "SV_RIGHT_SCROLL_TOGGLE"
+        "shortName": "Left\nMode Toggle",
+        "title": "Toggle the left device between Pointer and Scroll mode.",
+        "name": "SV_LEFT_MODE_TOGGLE"
+      },
+      {
+        "shortName": "Right\nMode Toggle",
+        "title": "Toggle the right device between Pointer and Scroll mode.",
+        "name": "SV_RIGHT_MODE_TOGGLE"
       },
       {
         "shortName": "Fix\nDrift",
@@ -82,14 +82,14 @@
         "name": "SV_SNIPER_5"
       },
       {
-	"shortName": "Scroll\nToggle\nHold",
-	"title": "Hold to toggle the scrolling mode of both pointers.",
-	"name": "SV_SCROLL_HOLD"
+	"shortName": "Both\nMode Hold",
+	"title": "Hold to swap both devices between Pointer and Scroll mode; release to restore.",
+	"name": "SV_BOTH_MODE_HOLD"
       },
       {
-	"shortName": "Scroll\nToggle",
-	"title": "Press to toggle the scrolling mode of both pointers.",
-	"name": "SV_SCROLL_TOGGLE"
+	"shortName": "Both\nMode Toggle",
+	"title": "Toggle both devices between Pointer and Scroll mode until pressed again or rebooted.",
+	"name": "SV_BOTH_MODE_TOGGLE"
       },
       {
 	"shortName": "Output\nStatus",

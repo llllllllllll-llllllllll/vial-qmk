@@ -28,14 +28,15 @@ struct layer_hsv {
 };
 
 struct __attribute__((__packed__)) saved_values {
-    uint8_t version;  // Currently at 1,  We assume all new data will be zeroed.
+    uint8_t version;  // Currently at 8. We assume all new data will be zeroed.
     bool left_scroll :1;
     bool right_scroll :1;
     bool axis_scroll_lock: 1;
     bool auto_mouse: 1;
     unsigned int unused0 :4;
-    uint8_t left_dpi_index;
-    uint8_t right_dpi_index;
+    // Stored in units of 100 CPI to preserve the existing one-byte EEPROM layout.
+    uint8_t scroll_cpi_units;
+    uint8_t pointer_cpi_units;
     uint8_t mh_timer_index;
     struct layer_hsv layer_colors[DYNAMIC_KEYMAP_LAYER_COUNT];
     uint8_t turbo_scan;
@@ -62,16 +63,19 @@ typedef struct saved_values saved_values_t;
 
 extern saved_values_t global_saved_values;
 void output_keyboard_info(void);
-void increase_left_dpi(void);
-void increase_right_dpi(void);
-void decrease_left_dpi(void);
-void decrease_right_dpi(void);
-void set_left_dpi(uint8_t index);
-void set_right_dpi(uint8_t index);
+void increase_scroll_cpi(void);
+void increase_pointer_cpi(void);
+void decrease_scroll_cpi(void);
+void decrease_pointer_cpi(void);
+void set_left_cpi(uint16_t cpi);
+void set_right_cpi(uint16_t cpi);
 void write_eeprom_kb(void);
 void change_turbo_scan(void);
 void recalibrate_pointer(void);
 void sval_set_active_layer(uint32_t layer, bool save);
 void sval_on_reconnect(void);
-int16_t get_left_dpi(void);
-int16_t get_right_dpi(void);
+uint16_t get_scroll_cpi(void);
+uint16_t get_pointer_cpi(void);
+bool sval_left_is_scroll_mode(void);
+bool sval_right_is_scroll_mode(void);
+void apply_pointing_cpi_for_modes(void);
