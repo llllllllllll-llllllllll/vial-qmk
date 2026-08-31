@@ -11,7 +11,7 @@ const int16_t mh_timer_choices[6] = { 200, 300, 400, 500, 800, -1 }; // -1 is in
 #define SVAL_CPI_MIN             200U
 #define SVAL_CPI_MAX             12000U
 #define SVAL_SCROLL_CPI_DEFAULT  800U
-#define SVAL_POINTER_CPI_DEFAULT 2800U
+#define SVAL_POINTER_CPI_DEFAULT 2000U
 
 // Version 7 and earlier stored indexes into this table. Keep it only for the
 // one-time EEPROM migration to version 8.

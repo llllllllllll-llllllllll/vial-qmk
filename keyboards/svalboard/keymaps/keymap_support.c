@@ -488,8 +488,8 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
                     keycode == SV_SCROLL_CPI_DEC || \
                     keycode == SV_POINTER_CPI_INC || \
                     keycode == SV_POINTER_CPI_DEC || \
-	                    keycode == SV_LEFT_SCROLL_TOGGLE || \
-		            keycode == SV_RIGHT_SCROLL_TOGGLE || \
+	                    keycode == SV_LEFT_MODE_TOGGLE || \
+		            keycode == SV_RIGHT_MODE_TOGGLE || \
 		            keycode == SV_AXIS_SCROLL_LOCK || \
 	                    keycode == SV_MH_CHANGE_TIMEOUTS || \
                         keycode == SV_TOGGLE_AUTOMOUSE)
@@ -542,13 +542,13 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
                 decrease_pointer_cpi();
                 apply_pointing_cpi_for_modes();
                 return false;
-            case SV_LEFT_SCROLL_TOGGLE:
+            case SV_LEFT_MODE_TOGGLE:
                 reset_scroll_state();
                 global_saved_values.left_scroll = !global_saved_values.left_scroll;
                 apply_pointing_cpi_for_modes();
                 write_eeprom_kb();
                 return false;
-            case SV_RIGHT_SCROLL_TOGGLE:
+            case SV_RIGHT_MODE_TOGGLE:
                 reset_scroll_state();
                 global_saved_values.right_scroll = !global_saved_values.right_scroll;
                 apply_pointing_cpi_for_modes();
@@ -588,12 +588,12 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
                 enable_scale_5 = true;
                 handle_sniper_key(true, 5);
                 return false;
-            case SV_SCROLL_HOLD:
+            case SV_BOTH_MODE_HOLD:
                 reset_scroll_state();
                 scroll_hold = true;
                 apply_pointing_cpi_for_modes();
                 return false;
-            case SV_SCROLL_TOGGLE:
+            case SV_BOTH_MODE_TOGGLE:
                 return false;
             case SV_OUTPUT_STATUS:
                 output_keyboard_info();
@@ -636,12 +636,12 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
                 enable_scale_5 = false;
                 handle_sniper_key(false, 5);
                 return false;
-            case SV_SCROLL_HOLD:
+            case SV_BOTH_MODE_HOLD:
                 reset_scroll_state();
                 scroll_hold = false;
                 apply_pointing_cpi_for_modes();
                 return false;
-            case SV_SCROLL_TOGGLE:
+            case SV_BOTH_MODE_TOGGLE:
                 reset_scroll_state();
                 scroll_toggle ^= true;
                 apply_pointing_cpi_for_modes();
